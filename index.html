@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>AlphabetAI Attendance – Smart Facial Recognition</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    body { font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; }
+    .scanner-laser {
+      background: linear-gradient(180deg, rgba(99, 102, 241, 0) 0%, rgba(99, 102, 241, 0.75) 50%, rgba(99, 102, 241, 0) 100%);
+      animation: scan 2s ease-in-out infinite;
+    }
+    @keyframes scan {
+      0% { top: 5%; }
+      50% { top: 85%; }
+      100% { top: 5%; }
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-900 min-h-screen flex flex-col antialiased selection:bg-indigo-500 selection:text-white">
+
+  <!-- TOP APP BAR -->
+  <header class="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-slate-200">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center text-white shadow-md shadow-indigo-200">
+          <i data-lucide="scan-face" class="w-6 h-6"></i>
+        </div>
+        <div>
+          <span class="font-bold text-lg tracking-tight bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent">AlphabetAI</span>
+          <span class="text-xs uppercase tracking-widest font-semibold text-slate-500 ml-1">Attendance</span>
+        </div>
+      </div>
+
+      <!-- Desktop Nav Tabs -->
+      <nav class="hidden md:flex items-center space-x-1 bg-slate-100 p-1 rounded-xl text-sm font-medium text-slate-600">
+        <button onclick="switchTab('scanner')" id="tab-scanner" class="nav-tab px-4 py-2 rounded-lg transition-all flex items-center space-x-2 bg-white text-indigo-600 shadow-sm">
+          <i data-lucide="camera" class="w-4 h-4"></i>
+          <span>Live Scanner</span>
+        </button>
+        <button onclick="switchTab('roster')" id="tab-roster" class="nav-tab px-4 py-2 rounded-lg transition-all flex items-center space-x-2 hover:text-slate-900">
+          <i data-lucide="users" class="w-4 h-4"></i>
+          <span>Students (A–Z)</span>
+        </button>
+        <button onclick="switchTab('verification')" id="tab-verification" class="nav-tab px-4 py-2 rounded-lg transition-all flex items-center space-x-2 hover:text-slate-900">
+          <i data-lucide="shield-check" class="w-4 h-4"></i>
+          <span>Teacher Verify</span>
+        </button>
+        <button onclick="switchTab('analytics')" id="tab-analytics" class="nav-tab px-4 py-2 rounded-lg transition-all flex items-center space-x-2 hover:text-slate-900">
+          <i data-lucide="bar-chart-3" class="w-4 h-4"></i>
+          <span>Reports & Stats</span>
+        </button>
+      </nav>
+
+      <!-- Action Button -->
+      <div class="flex items-center space-x-2">
+        <button onclick="openRegisterModal()" class="inline-flex items-center space-x-2 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-sm transition-all shadow-sm shadow-indigo-200 active:scale-95">
+          <i data-lucide="user-plus" class="w-4 h-4"></i>
+          <span class="hidden sm:inline">Add Student</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN VIEWPORT CONTAINER -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
+
+    <!-- 1. LIVE CAMERA SCANNER VIEW -->
+    <section id="view-scanner" class="space-y-6">
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        <!-- Video Viewport Column -->
+        <div class="lg:col-span-2 space-y-4">
+          <div class="relative bg-black rounded-3xl overflow-hidden shadow-2xl aspect-[4/3] sm:aspect-[16/10] flex items-center justify-center border-4 border-slate-900">
+            <!-- Video element -->
+            <video id="webcam" autoplay playsinline muted class="w-full h-full object-cover"></video>
+            
+            <!-- Canvas for HUD bounding box overlay -->
+            <canvas id="overlay-canvas" class="absolute inset-0 w-full h-full pointer-events-none"></canvas>
+
+            <!-- Laser Scan Line Effect -->
+            <div id="scanner-laser" class="scanner-laser absolute w-full h-12 pointer-events-none hidden"></div>
+
+            <!-- Face Bounding Target Guide -->
+            <div id="face-target-guide" class="absolute inset-0 pointer-events-none flex items-center justify-center p-8">
+              <div class="w-64 h-72 sm:w-80 sm:h-96 border-2 border-dashed border-indigo-400/60 rounded-3xl relative flex items-center justify-center">
+                <div class="absolute -top-3 px-3 py-1 bg-indigo-600 text-white text-xs font-semibold rounded-full uppercase tracking-wider flex items-center space-x-1">
+                  <i data-lucide="eye" class="w-3.5 h-3.5"></i>
+                  <span>Liveness Target</span>
+                </div>
+                <!-- Corner Accents -->
+                <div class="absolute -top-1 -left-1 w-6 h-6 border-t-4 border-l-4 border-indigo-400 rounded-tl-xl"></div>
+                <div class="absolute -top-1 -right-1 w-6 h-6 border-t-4 border-r-4 border-indigo-400 rounded-tr-xl"></div>
+                <div class="absolute -bottom-1 -left-1 w-6 h-6 border-b-4 border-l-4 border-indigo-400 rounded-bl-xl"></div>
+                <div class="absolute -bottom-1 -right-1 w-6 h-6 border-b-4 border-r-4 border-indigo-400 rounded-br-xl"></div>
+              </div>
+            </div>
+
+            <!-- Standby Overlay (when camera off) -->
+            <div id="camera-standby" class="absolute inset-0 bg-slate-900/90 backdrop-blur-sm flex flex-col items-center justify-center text-white p-6 text-center space-y-4">
+              <div class="w-16 h-16 rounded-2xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center">
+                <i data-lucide="video" class="w-8 h-8"></i>
+              </div>
+              <div>
+                <h3 class="text-lg font-semibold">AI Camera Inactive</h3>
+                <p class="text-sm text-slate-400 max-w-sm mt-1">Activate the mobile or desktop camera to start automated face attendance recognition.</p>
+              </div>
+              <button onclick="startCamera()" class="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-sm shadow-lg shadow-indigo-600/30 transition-all flex items-center space-x-2">
+                <i data-lucide="play" class="w-4 h-4"></i>
+                <span>Start Camera Feed</span>
+              </button>
+            </div>
+
+            <!-- Recognition Success Floating Card -->
+            <div id="recognition-banner" class="absolute bottom-4 left-4 right-4 bg-white/95 backdrop-blur-md rounded-2xl p-4 shadow-xl border border-emerald-200 transform translate-y-32 transition-transform duration-300 flex items-center justify-between">
+              <div class="flex items-center space-x-3">
+                <img id="banner-avatar" src="" alt="Avatar" class="w-12 h-12 rounded-xl object-cover border-2 border-emerald-500">
+                <div>
+                  <div class="flex items-center space-x-2">
+                    <span id="banner-name" class="font-bold text-slate-900">Student Name</span>
+                    <span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700">PRESENT ✅</span>
+                  </div>
+                  <p class="text-xs text-slate-500 font-mono mt-0.5"><span id="banner-roll">ROLL-001</span> • Confidence: <span id="banner-conf">98.4%</span></p>
+                </div>
+              </div>
+              <div class="text-right text-xs text-slate-400 font-medium">
+                <span id="banner-time">09:15 AM</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Camera Controls Bar -->
+          <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-3">
+            <div class="flex items-center space-x-2">
+              <button id="btn-camera-toggle" onclick="toggleCamera()" class="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium text-sm transition-all flex items-center space-x-2">
+                <i data-lucide="video" class="w-4 h-4"></i>
+                <span id="camera-btn-text">Start Camera</span>
+              </button>
+              <button onclick="switchCameraFacing()" class="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium text-sm transition-all flex items-center space-x-1.5" title="Flip Camera">
+                <i data-lucide="flip-horizontal" class="w-4 h-4"></i>
+                <span class="hidden sm:inline">Flip Cam</span>
+              </button>
+            </div>
+
+            <div class="flex items-center space-x-2">
+              <!-- Simulate Recognition Demo Trigger -->
+              <button onclick="simulateRecognition()" class="px-4 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-medium text-sm transition-all flex items-center space-x-1.5 border border-indigo-200 shadow-sm">
+                <i data-lucide="sparkles" class="w-4 h-4"></i>
+                <span>Simulate Detection</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Real-time Recognition Feed Column -->
+        <div class="space-y-4">
+          <div class="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm flex flex-col h-[520px]">
+            <div class="flex items-center justify-between pb-4 border-b border-slate-100">
+              <div class="flex items-center space-x-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                <h3 class="font-bold text-slate-800 text-base">Live Attendance Stream</h3>
+              </div>
+              <span id="live-count-badge" class="px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700 text-xs font-semibold">0 Marked</span>
+            </div>
+
+            <!-- Feed Items List -->
+            <div id="live-feed-list" class="flex-1 overflow-y-auto divide-y divide-slate-100 py-2 space-y-2 pr-1">
+              <!-- Dynamic entries populate here -->
+            </div>
+
+            <!-- Footer Stats -->
+            <div class="pt-3 border-t border-slate-100 text-xs text-slate-400 flex items-center justify-between">
+              <span>Smart deduplication active</span>
+              <span class="text-indigo-600 font-medium cursor-pointer" onclick="switchTab('roster')">View full roster &rarr;</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. STUDENT ROSTER & SORTING (A-Z / ROLL NUMBER) VIEW -->
+    <section id="view-roster" class="space-y-6 hidden">
+      <!-- Header & Sorting Controls -->
+      <div class="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-4">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h2 class="text-xl font-bold text-slate-900 tracking-tight">Student Directory & Attendance</h2>
+            <p class="text-sm text-slate-500 mt-0.5">Filter, search, and sort students alphabetically (A–Z) or by Roll Number sequence.</p>
+          </div>
+
+          <!-- Quick Stats Pills -->
+          <div class="flex items-center space-x-2">
+            <span class="px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-semibold flex items-center space-x-1">
+              <i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i>
+              <span id="pill-present">0 Present</span>
+            </span>
+            <span class="px-3 py-1.5 rounded-xl bg-amber-50 text-amber-700 border border-amber-200 text-xs font-semibold flex items-center space-x-1">
+              <i data-lucide="clock" class="w-3.5 h-3.5"></i>
+              <span id="pill-late">0 Late</span>
+            </span>
+            <span class="px-3 py-1.5 rounded-xl bg-rose-50 text-rose-700 border border-rose-200 text-xs font-semibold flex items-center space-x-1">
+              <i data-lucide="x-circle" class="w-3.5 h-3.5"></i>
+              <span id="pill-absent">0 Absent</span>
+            </span>
+          </div>
+        </div>
+
+        <!-- Filter & Search Toolbar -->
+        <div class="grid grid-cols-1 md:grid-cols-12 gap-3 pt-2">
+          <!-- Search input -->
+          <div class="md:col-span-5 relative">
+            <i data-lucide="search" class="w-4 h-4 absolute left-3.5 top-3 text-slate-400"></i>
+            <input type="text" id="roster-search" oninput="debounceFetchStudents()" placeholder="Search by name or roll number..." 
+              class="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all">
+          </div>
+
+          <!-- Sort Selector -->
+          <div class="md:col-span-4 flex items-center space-x-2">
+            <label class="text-xs font-semibold text-slate-500 uppercase tracking-wider shrink-0">Sort By:</label>
+            <select id="roster-sort" onchange="fetchStudents()" class="w-full py-2.5 px-3 rounded-xl bg-slate-50 border border-slate-200 text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              <option value="name_asc">Alphabetical (A → Z)</option>
+              <option value="name_desc">Alphabetical (Z → A)</option>
+              <option value="roll_asc">Roll Number (Ascending 0 → 9)</option>
+              <option value="roll_desc">Roll Number (Descending 9 → 0)</option>
+              <option value="status">Status (Present First)</option>
+            </select>
+          </div>
+
+          <!-- Quick Actions -->
+          <div class="md:col-span-3 flex items-center justify-end space-x-2">
+            <button onclick="downloadCSV()" class="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium text-sm transition-all flex items-center justify-center space-x-2">
+              <i data-lucide="download" class="w-4 h-4"></i>
+              <span>Export CSV</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Students Table / Card Grid -->
+      <div class="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="bg-slate-50/80 border-b border-slate-200 text-xs uppercase tracking-wider font-semibold text-slate-500">
+                <th class="py-3.5 px-6">Roll No</th>
+                <th class="py-3.5 px-6">Student</th>
+                <th class="py-3.5 px-6">Department</th>
+                <th class="py-3.5 px-6">Status</th>
+                <th class="py-3.5 px-6">Marked Time</th>
+                <th class="py-3.5 px-6 text-right">Quick Toggle</th>
+              </tr>
+            </thead>
+            <tbody id="roster-tbody" class="divide-y divide-slate-100 text-sm">
+              <!-- Dynamically populated rows -->
+            </tbody>
+          </table>
+        </div>
+        <div id="roster-empty" class="p-12 text-center text-slate-400 hidden">
+          <i data-lucide="inbox" class="w-12 h-12 mx-auto mb-3 stroke-1"></i>
+          <p class="font-medium text-slate-600">No students found matching your criteria</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. TEACHER VERIFICATION & AUDIT LOGS VIEW -->
+    <section id="view-verification" class="space-y-6 hidden">
+      <div class="bg-gradient-to-r from-indigo-700 to-violet-800 rounded-3xl p-6 sm:p-8 text-white shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div class="space-y-2">
+          <div class="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md text-xs font-semibold">
+            <i data-lucide="shield-alert" class="w-3.5 h-3.5 text-indigo-200"></i>
+            <span>Teacher Verification Center</span>
+          </div>
+          <h2 class="text-2xl font-bold tracking-tight">Review & Sign Off Today's Roster</h2>
+          <p class="text-indigo-100 text-sm max-w-xl">Verify AI facial detection records, apply manual overrides with required justifications, and lock the session.</p>
+        </div>
+        <div class="flex items-center space-x-3 shrink-0">
+          <button onclick="verifyAllAttendance()" class="px-5 py-3 rounded-2xl bg-white text-indigo-700 hover:bg-indigo-50 font-semibold text-sm transition-all shadow-lg flex items-center space-x-2">
+            <i data-lucide="check-check" class="w-5 h-5"></i>
+            <span>Sign Off All Records</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Audit History & Override Tracker -->
+      <div class="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-4">
+        <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+          <div>
+            <h3 class="font-bold text-slate-900 text-base">Teacher Override Audit Trail</h3>
+            <p class="text-xs text-slate-500">Full log of all manual edits for accountability and institutional compliance.</p>
+          </div>
+          <button onclick="fetchAuditLogs()" class="p-2 rounded-xl text-slate-500 hover:bg-slate-100 transition-all" title="Refresh Logs">
+            <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+          </button>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse text-sm">
+            <thead>
+              <tr class="bg-slate-50 text-xs uppercase font-semibold text-slate-500 border-b border-slate-200">
+                <th class="py-3 px-4">Timestamp</th>
+                <th class="py-3 px-4">Student</th>
+                <th class="py-3 px-4">Change</th>
+                <th class="py-3 px-4">Reason / Notes</th>
+                <th class="py-3 px-4">Authorized By</th>
+              </tr>
+            </thead>
+            <tbody id="audit-tbody" class="divide-y divide-slate-100 text-xs">
+              <!-- Logs populate here -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. ANALYTICS & REPORTS VIEW -->
+    <section id="view-analytics" class="space-y-6 hidden">
+      <!-- Metric Cards Grid -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm space-y-2">
+          <div class="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+            <i data-lucide="users-round" class="w-5 h-5"></i>
+          </div>
+          <div class="text-2xl font-bold text-slate-900" id="stat-total">0</div>
+          <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Enrolled</div>
+        </div>
+
+        <div class="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm space-y-2">
+          <div class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+            <i data-lucide="check" class="w-5 h-5"></i>
+          </div>
+          <div class="text-2xl font-bold text-slate-900" id="stat-present">0</div>
+          <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Present Today</div>
+        </div>
+
+        <div class="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm space-y-2">
+          <div class="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
+            <i data-lucide="clock" class="w-5 h-5"></i>
+          </div>
+          <div class="text-2xl font-bold text-slate-900" id="stat-late">0</div>
+          <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Late Arrivals</div>
+        </div>
+
+        <div class="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm space-y-2">
+          <div class="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+            <i data-lucide="percent" class="w-5 h-5"></i>
+          </div>
+          <div class="text-2xl font-bold text-slate-900" id="stat-rate">0%</div>
+          <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Attendance Rate</div>
+        </div>
+      </div>
+
+      <!-- Institutional Report Card -->
+      <div class="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-4">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+          <div>
+            <h3 class="font-bold text-slate-900 text-lg">Daily Attendance Report</h3>
+            <p class="text-xs text-slate-500 mt-0.5">Automated institution report generated by AlphabetAI Attendance Engine.</p>
+          </div>
+          <div class="flex items-center space-x-2">
+            <button onclick="downloadCSV()" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs transition-all flex items-center space-x-1.5 shadow-sm">
+              <i data-lucide="file-spreadsheet" class="w-4 h-4"></i>
+              <span>Download CSV Sheet</span>
+            </button>
+            <button onclick="window.print()" class="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium text-xs transition-all flex items-center space-x-1.5">
+              <i data-lucide="printer" class="w-4 h-4"></i>
+              <span>Print Summary</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Privacy & Security Notice -->
+        <div class="p-4 rounded-2xl bg-indigo-50/60 border border-indigo-100 text-xs text-indigo-900 flex items-start space-x-3">
+          <i data-lucide="lock" class="w-4 h-4 text-indigo-600 shrink-0 mt-0.5"></i>
+          <div>
+            <span class="font-bold">Biometric Privacy Guarantee:</span>
+            Raw facial images are processed into non-reversible numerical vector embeddings. No unencrypted photo archives are transmitted or retained on public nodes. Compliant with educational privacy guidelines.
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- MOBILE BOTTOM NAVIGATION BAR -->
+  <nav class="md:hidden sticky bottom-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 px-4 py-2 flex justify-around">
+    <button onclick="switchTab('scanner')" class="mobile-nav-btn flex flex-col items-center text-indigo-600 py-1" id="m-tab-scanner">
+      <i data-lucide="camera" class="w-5 h-5"></i>
+      <span class="text-[10px] font-semibold mt-1">Scan</span>
+    </button>
+    <button onclick="switchTab('roster')" class="mobile-nav-btn flex flex-col items-center text-slate-400 py-1" id="m-tab-roster">
+      <i data-lucide="users" class="w-5 h-5"></i>
+      <span class="text-[10px] font-semibold mt-1">A–Z List</span>
+    </button>
+    <button onclick="switchTab('verification')" class="mobile-nav-btn flex flex-col items-center text-slate-400 py-1" id="m-tab-verification">
+      <i data-lucide="shield-check" class="w-5 h-5"></i>
+      <span class="text-[10px] font-semibold mt-1">Verify</span>
+    </button>
+    <button onclick="switchTab('analytics')" class="mobile-nav-btn flex flex-col items-center text-slate-400 py-1" id="m-tab-analytics">
+      <i data-lucide="bar-chart-3" class="w-5 h-5"></i>
+      <span class="text-[10px] font-semibold mt-1">Reports</span>
+    </button>
+  </nav>
+
+  <!-- MODAL: REGISTER NEW STUDENT -->
+  <div id="modal-register" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-lg w-full p-6 space-y-5 shadow-2xl relative animate-in fade-in zoom-in-95 duration-200">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+        <div class="flex items-center space-x-2">
+          <div class="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center">
+            <i data-lucide="user-plus" class="w-4 h-4"></i>
+          </div>
+          <h3 class="font-bold text-slate-900 text-lg">Register New Student</h3>
+        </div>
+        <button onclick="closeRegisterModal()" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <form id="form-register" onsubmit="submitStudentRegistration(event)" class="space-y-4">
+        <!-- Photo snapshot / avatar input -->
+        <div class="flex items-center space-x-4">
+          <div class="w-20 h-20 rounded-2xl bg-slate-100 border-2 border-dashed border-slate-300 flex items-center justify-center overflow-hidden relative">
+            <img id="reg-avatar-preview" src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150" class="w-full h-full object-cover">
+          </div>
+          <div class="space-y-1.5 flex-1">
+            <label class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Avatar URL or Photo</label>
+            <input type="url" id="reg-avatar" placeholder="https://..." value="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150"
+              onchange="document.getElementById('reg-avatar-preview').src = this.value"
+              class="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <p class="text-[11px] text-slate-400">128-d AI face embeddings extracted automatically.</p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div class="space-y-1">
+            <label class="text-xs font-semibold text-slate-600">Full Name *</label>
+            <input type="text" id="reg-name" required placeholder="e.g. Maya Iyer" 
+              class="w-full px-3.5 py-2.5 text-sm rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          </div>
+          <div class="space-y-1">
+            <label class="text-xs font-semibold text-slate-600">Roll Number *</label>
+            <input type="text" id="reg-roll" required placeholder="e.g. CS2026-015" 
+              class="w-full px-3.5 py-2.5 text-sm rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 uppercase">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div class="space-y-1">
+            <label class="text-xs font-semibold text-slate-600">Department</label>
+            <input type="text" id="reg-dept" value="Computer Science" 
+              class="w-full px-3.5 py-2.5 text-sm rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          </div>
+          <div class="space-y-1">
+            <label class="text-xs font-semibold text-slate-600">Section</label>
+            <select id="reg-sec" class="w-full px-3.5 py-2.5 text-sm rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              <option value="A">Section A</option>
+              <option value="B">Section B</option>
+              <option value="C">Section C</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="space-y-1">
+          <label class="text-xs font-semibold text-slate-600">Student / Guardian Email</label>
+          <input type="email" id="reg-email" placeholder="student@alphabetai.edu" 
+            class="w-full px-3.5 py-2.5 text-sm rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        </div>
+
+        <div class="pt-3 flex items-center justify-end space-x-2">
+          <button type="button" onclick="closeRegisterModal()" class="px-4 py-2.5 rounded-xl text-slate-600 hover:bg-slate-100 font-medium text-sm">Cancel</button>
+          <button type="submit" class="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm shadow-md shadow-indigo-200 transition-all">Save & Enrol Face</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: TEACHER MANUAL OVERRIDE -->
+  <div id="modal-override" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl relative">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+        <h3 class="font-bold text-slate-900 text-base">Teacher Manual Override</h3>
+        <button onclick="closeOverrideModal()" class="text-slate-400 hover:text-slate-600">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <form id="form-override" onsubmit="submitOverride(event)" class="space-y-4">
+        <input type="hidden" id="override-student-id">
+        <div>
+          <label class="text-xs font-semibold text-slate-500">Student</label>
+          <div id="override-student-name" class="font-bold text-slate-800 text-base mt-0.5">--</div>
+        </div>
+
+        <div class="space-y-1">
+          <label class="text-xs font-semibold text-slate-600">New Attendance Status</label>
+          <select id="override-status" class="w-full px-3.5 py-2.5 text-sm rounded-xl bg-slate-50 border border-slate-200 font-medium">
+            <option value="Present">Present</option>
+            <option value="Late">Late</option>
+            <option value="Absent">Absent</option>
+            <option value="Excused">Excused (Medical / Official)</option>
+          </select>
+        </div>
+
+        <div class="space-y-1">
+          <label class="text-xs font-semibold text-slate-600">Audit Justification / Reason *</label>
+          <input type="text" id="override-reason" required placeholder="e.g. Medical slip submitted, camera glare" 
+            class="w-full px-3.5 py-2.5 text-sm rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        </div>
+
+        <div class="space-y-1">
+          <label class="text-xs font-semibold text-slate-600">Teacher Authorizer</label>
+          <input type="text" id="override-teacher" value="Prof. Sharma (Admin)" 
+            class="w-full px-3.5 py-2.5 text-sm rounded-xl bg-slate-50 border border-slate-200 text-slate-600">
+        </div>
+
+        <div class="pt-2 flex items-center justify-end space-x-2">
+          <button type="button" onclick="closeOverrideModal()" class="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 text-sm">Cancel</button>
+          <button type="submit" class="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm shadow-md">Apply Override</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- APPLICATION SCRIPTS -->
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
